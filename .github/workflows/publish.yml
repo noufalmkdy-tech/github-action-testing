@@ -2,7 +2,7 @@ name: Build and Deploy .net application
 
 on:
   push:
-    branches: [ "main","test" ]
+    branches: [ "main","test", "master" ]
   workflow_dispatch:
 
 env:
