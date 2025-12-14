@@ -1,0 +1,64 @@
+# Visual Studio / .NET artifacts
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+artifacts/
+
+# Publish output
+publish/
+*/publish/
+*.zip
+
+# NuGet / packages
+*.nupkg
+packages/
+.nuget/
+
+# Runtime / logs / test results
+*.log
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# IIS / local web server config
+IISExpress/
+applicationhost.config
+
+# User secrets and sensitive files
+secrets.json
+*.pfx
+*.p12
+*.jks
+.env
+.env.*
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Rider / JetBrains
+.idea/
+*.sln.DotSettings
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Misc
+*.vsix
+*.ncb
+*.sdf
+*.cache
+*.db
