@@ -1,101 +1,47 @@
-﻿name: Build & Deploy .NET 9 to IIS (Windows)
+﻿name: Deploy .NET Core App to AWS EC2 IIS
 
 on:
   push:
-    branches: ["master", "main"]
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches:
+      - master
 
 jobs:
-  build:
-    name: Build Job
+  build-and-deploy:
     runs-on: windows-latest
 
+    env:
+      BUILD_CONFIG: Release
+      PUBLISH_DIR: publish_output
+
     steps:
-      - name: Checkout Source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '8.0.x'   # change if needed
 
-      - name: Restore Dependencies
+      - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build Application
-        run: dotnet build --configuration Release --no-restore
+      - name: Build
+        run: dotnet build --configuration $env:BUILD_CONFIG --no-restore
 
-      - name: Publish Application
-        run: dotnet publish --configuration Release --output publish
+      - name: Publish
+        run: |
+          dotnet publish `
+            --configuration $env:BUILD_CONFIG `
+            --output $env:PUBLISH_DIR
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dotnet9-publish
-          path: publish
-
-  deploy:
-    name: Deploy to IIS
-    runs-on: windows-latest
-    needs: build
-
-    steps:
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dotnet9-publish
-          path: publish
-
-      - name: Deploy using MSDeploy (WMSVC)
+      - name: Deploy to IIS on EC2 (Web Deploy)
         shell: pwsh
-        env:
-          IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
-          IIS_SERVER: ${{ secrets.IIS_SERVER }}
-          IIS_USERNAME: ${{ secrets.IIS_USERNAME }}
-          IIS_PASSWORD: ${{ secrets.IIS_PASSWORD }}
         run: |
           $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-          if (-not (Test-Path $msdeploy)) {
-            Write-Error "msdeploy.exe not found"
-            exit 1
-          }
-
-          $site   = $env:IIS_SITE_NAME
-          $server = $env:IIS_SERVER
-          $user   = $env:IIS_USERNAME
-          $pass   = $env:IIS_PASSWORD
-
-          if ([string]::IsNullOrWhiteSpace($server)) { throw "IIS_SERVER secret is missing" }
-          if ([string]::IsNullOrWhiteSpace($site))   { throw "IIS_SITE_NAME secret is missing" }
-          if ([string]::IsNullOrWhiteSpace($user))   { throw "IIS_USERNAME secret is missing" }
-          if ([string]::IsNullOrWhiteSpace($pass))   { throw "IIS_PASSWORD secret is missing" }
-
-          # Build correct WMSVC URL
-          $computerName = "https://$server:8172/msdeploy.axd?site=$site"
-
-          # Zip publish folder
-          $zipPath = Join-Path $env:RUNNER_TEMP "site.zip"
-          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-
-          Compress-Archive -Path "publish\*" -DestinationPath $zipPath -Force
-
-          if (-not (Test-Path $zipPath)) {
-            throw "Deployment package not created"
-          }
-
-          Write-Host "Deploying to IIS site '$site' on '$server'"
 
           & $msdeploy `
-          -verb:sync `
-          -source:package=$zipPath `
-          -dest:auto,computerName=$computerName,userName=$user,password=$pass,authType=Basic `
-          -allowUntrusted `
-          -enableRule:AppOffline
-
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "msdeploy failed with exit code $LASTEXITCODE"
-          }
+            -verb:sync `
+            -source:contentPath="$env:PUBLISH_DIR" `
+            -dest:contentPath="${{ secrets.IIS_SITE_NAME }}",computerName="https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd",userName="${{ secrets.IIS_USERNAME }}",password="${{ secrets.IIS_PASSWORD }}",authType="Basic" `
+            -allowUntrusted `
+            -enableRule:AppOffline
