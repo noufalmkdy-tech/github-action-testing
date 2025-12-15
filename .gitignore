@@ -13,8 +13,7 @@ obj/
 artifacts/
 
 # Publish output
-publish/
-*/publish/
+
 *.zip
 
 # NuGet / packages

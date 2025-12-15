@@ -49,7 +49,7 @@ jobs:
         name: dotnet9-publish
         path: publish
 
-    - name: Deploy using MSDeploy
+    - name: Deploy using MSDeploy (Package Mode)
       shell: pwsh
       env:
         IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
@@ -64,19 +64,33 @@ jobs:
           exit 1
         }
 
-        if ([string]::IsNullOrWhiteSpace($env:IIS_SITE_NAME)) {
-          Write-Error "IIS_SITE_NAME secret is missing"
+        $site = $env:IIS_SITE_NAME
+        $server = $env:IIS_SERVER
+
+        if (-not $site -or -not $server) {
+          Write-Error "IIS_SITE_NAME or IIS_SERVER missing"
           exit 1
         }
 
-        $computerName = "https://$($env:IIS_SERVER):8172/msdeploy.axd"
+        # Create deployment package locally
+        $zip = Join-Path $env:RUNNER_TEMP "app.zip"
+        if (Test-Path $zip) { Remove-Item $zip -Force }
 
-        Write-Host "Deploying to IIS site '$($env:IIS_SITE_NAME)' on server '$($env:IIS_SERVER)'"
+        Compress-Archive -Path "publish\*" -DestinationPath $zip -Force
+
+        if (-not (Test-Path $zip)) {
+          Write-Error "Deployment package not created"
+          exit 1
+        }
+
+        $computerName = "https://$server:8172/msdeploy.axd?site=$site"
+
+        Write-Host "Deploying PACKAGE to IIS site '$site' on server '$server'"
 
         & $msdeploy `
           -verb:sync `
-          -source:contentPath=publish `
-          -dest:iisApp=$($env:IIS_SITE_NAME),computerName=$computerName,userName=$($env:IIS_USERNAME),password=$($env:IIS_PASSWORD),authType=Basic `
+          -source:package="$zip" `
+          -dest:iisApp="$site",computerName="$computerName",userName="$($env:IIS_USERNAME)",password="$($env:IIS_PASSWORD)",authType="Basic" `
           -allowUntrusted `
           -enableRule:AppOffline
 
@@ -84,4 +98,5 @@ jobs:
           Write-Error "msdeploy failed with exit code $LASTEXITCODE"
           exit $LASTEXITCODE
         }
+
 
