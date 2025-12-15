@@ -1,4 +1,4 @@
-name: Build & Deploy .NET 9 to IIS (Windows)
+﻿name: Build & Deploy .NET 9 to IIS (Windows)
 
 on:
   push:
@@ -37,3 +37,28 @@ jobs:
       with:
         name: dotnet9-publish
         path: publish
+
+  deploy:
+    name: Deploy to IIS
+    runs-on: windows-latest
+    needs: build   # 🔒 DEPLOY ONLY AFTER BUILD SUCCESS
+
+    steps:
+    - name: Download Build Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: dotnet9-publish
+        path: publish
+
+    - name: Deploy using MSDeploy
+      shell: pwsh
+      run: |
+        $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+
+        & $msdeploy `
+          -verb:sync `
+          -source:contentPath="publish" `
+          -dest:contentPath="${{ secrets.IIS_SITE_NAME }}",computerName="https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd", `
+          userName="${{ secrets.IIS_USERNAME }}",password="${{ secrets.IIS_PASSWORD }}",authType="Basic" `
+          -allowUntrusted `
+          -enableRule:AppOffline
