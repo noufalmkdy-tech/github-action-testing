@@ -4,7 +4,6 @@ on:
   push:
     branches: ["master", "main"]
   workflow_dispatch:
-  
 
 permissions:
   contents: read
@@ -41,7 +40,7 @@ jobs:
   deploy:
     name: Deploy to IIS
     runs-on: windows-latest
-    needs: build   # 🔒 DEPLOY ONLY AFTER BUILD SUCCESS
+    needs: build
 
     steps:
     - name: Download Build Artifact
@@ -49,14 +48,48 @@ jobs:
       with:
         name: dotnet9-publish
         path: publish
- 
-    - name: Deploy with msdeploy
-      shell: powershell
+
+    - name: Deploy using MSDeploy
+      shell: pwsh
+      env:
+        IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
+        IIS_SERVER: ${{ secrets.IIS_SERVER }}
+        IIS_USERNAME: ${{ secrets.IIS_USERNAME }}
+        IIS_PASSWORD: ${{ secrets.IIS_PASSWORD }}
+        ARTIFACT_NAME: dotnet9-publish
       run: |
-          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-          $package = Join-Path $env:RUNNER_TEMP "${{ env.ARTIFACT_NAME }}.zip"
+        $msdeploy = 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe'
+        if (-not (Test-Path $msdeploy)) {
+          Write-Error "msdeploy.exe not found at $msdeploy"
+          exit 1
+        }
 
-          # Use single quotes for values that may contain $ or $(...)
-          $dest = "auto,ComputerName='https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd?site=${{ secrets.IIS_SITE_NAME }}',UserName='${{ secrets.DEPLOY_USER }}',Password='${{ secrets.DEPLOY_PASSWORD }}',AuthType='Basic'"
+        # Resolve publish folder and create a ZIP package for msdeploy
+        $publishDir = (Resolve-Path -Path 'publish' -ErrorAction Stop).Path
+        $zip = Join-Path $env:RUNNER_TEMP "$($env:ARTIFACT_NAME).zip"
 
-          & "$msdeploy" -verb:sync -source:package="$package" -dest:$dest -allowUntrusted
+        if (Test-Path $zip) { Remove-Item $zip -Force }
+        Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zip -Force
+
+        if (-not (Test-Path $zip)) {
+          Write-Error "Package not created: $zip"
+          exit 1
+        }
+
+        # Read secrets from environment (prevents PowerShell parser issues with $() in YAML)
+        $site   = $env:IIS_SITE_NAME
+        $server = $env:IIS_SERVER
+        $user   = $env:IIS_USERNAME
+        $pass   = $env:IIS_PASSWORD
+
+        # Build providers using single-quoted values to avoid subexpression parsing
+        $source = "package='$zip'"
+        $dest   = "contentPath='$site',computerName='https://$server:8172/msdeploy.axd',userName='$user',password='$pass',authType='Basic'"
+
+        Write-Host "Deploying package $zip to $site on $server"
+        & "$msdeploy" -verb:sync "-source:$source" "-dest:$dest" -allowUntrusted -enableRule:AppOffline
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "msdeploy failed with exit code $LASTEXITCODE"
+          exit $LASTEXITCODE
+        }
