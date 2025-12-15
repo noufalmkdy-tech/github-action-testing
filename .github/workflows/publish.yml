@@ -64,10 +64,36 @@ jobs:
           exit 1
         }
 
-        # Resolve publish folder and create a ZIP package for msdeploy
+        # Read and validate required inputs
+        $site   = $env:IIS_SITE_NAME
+        $server = $env:IIS_SERVER
+        $user   = $env:IIS_USERNAME
+        $pass   = $env:IIS_PASSWORD
+
+        if (-not $server) {
+          Write-Error "IIS_SERVER secret is empty. Set the secret 'IIS_SERVER' in repository settings."
+          exit 1
+        }
+        if (-not $site) {
+          Write-Error "IIS_SITE_NAME secret is empty. Set the secret 'IIS_SITE_NAME' in repository settings."
+          exit 1
+        }
+
+        # Normalize server into a proper MSDeploy computerName URL
+        if ($server -match '^https?://') {
+          $base = $server.TrimEnd('/')
+          if ($base -notmatch '/msdeploy.axd$') {
+            $computerUrl = "$base/msdeploy.axd?site=$site"
+          } else {
+            $computerUrl = "$base?site=$site"
+          }
+        } else {
+          $computerUrl = "https://$server:8172/msdeploy.axd?site=$site"
+        }
+
+        # Create package zip for msdeploy
         $publishDir = (Resolve-Path -Path 'publish' -ErrorAction Stop).Path
         $zip = Join-Path $env:RUNNER_TEMP "$($env:ARTIFACT_NAME).zip"
-
         if (Test-Path $zip) { Remove-Item $zip -Force }
         Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zip -Force
 
@@ -76,17 +102,11 @@ jobs:
           exit 1
         }
 
-        # Read secrets from environment (prevents PowerShell parser issues with $() in YAML)
-        $site   = $env:IIS_SITE_NAME
-        $server = $env:IIS_SERVER
-        $user   = $env:IIS_USERNAME
-        $pass   = $env:IIS_PASSWORD
-
-        # Build providers using single-quoted values to avoid subexpression parsing
+        # Build msdeploy provider strings
         $source = "package='$zip'"
-        $dest   = "contentPath='$site',computerName='https://$server:8172/msdeploy.axd',userName='$user',password='$pass',authType='Basic'"
+        $dest   = "auto,computerName='$computerUrl',userName='$user',password='$pass',authType='Basic'"
 
-        Write-Host "Deploying package $zip to $site on $server"
+        Write-Host "Deploying package $zip to site '$site' on server '$server'"
         & "$msdeploy" -verb:sync "-source:$source" "-dest:$dest" -allowUntrusted -enableRule:AppOffline
 
         if ($LASTEXITCODE -ne 0) {
