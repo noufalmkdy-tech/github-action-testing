@@ -7,7 +7,7 @@ on:
 
 env:
   SOLUTION_PATH: src/MyApp.sln
-  PROJECT_PATH: src/MyApp/MyApp.csproj
+  PROJECT_PATH: MyApp/MyApp.csproj
   ARTIFACT_NAME: webapp_package
   PUBLISH_SUBFOLDER: publish
 
