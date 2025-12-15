@@ -66,20 +66,21 @@ jobs:
 
         $site = $env:IIS_SITE_NAME
         $server = $env:IIS_SERVER
+        $user = $env:IIS_USERNAME
+        $pass = $env:IIS_PASSWORD
 
-        if (-not $site -or -not $server) {
-          Write-Error "IIS_SITE_NAME or IIS_SERVER missing"
+        if (-not $site -or -not $server -or -not $user -or -not $pass) {
+          Write-Error "One or more IIS secrets are missing"
           exit 1
         }
 
-        # Create deployment package locally
+        # Create deployment package
         $zip = Join-Path $env:RUNNER_TEMP "app.zip"
         if (Test-Path $zip) { Remove-Item $zip -Force }
-
         Compress-Archive -Path "publish\*" -DestinationPath $zip -Force
 
         if (-not (Test-Path $zip)) {
-          Write-Error "Deployment package not created"
+          Write-Error "Package creation failed"
           exit 1
         }
 
@@ -89,8 +90,8 @@ jobs:
 
         & $msdeploy `
           -verb:sync `
-          -source:package="$zip" `
-          -dest:iisApp="$site",computerName="$computerName",userName="$($env:IIS_USERNAME)",password="$($env:IIS_PASSWORD)",authType="Basic" `
+          -source:package=$zip `
+          -dest:iisApp=$site,computerName=$computerName,userName=$user,password=$pass,authType=Basic `
           -allowUntrusted `
           -enableRule:AppOffline
 
@@ -98,5 +99,6 @@ jobs:
           Write-Error "msdeploy failed with exit code $LASTEXITCODE"
           exit $LASTEXITCODE
         }
+
 
 
