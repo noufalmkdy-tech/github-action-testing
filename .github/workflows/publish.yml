@@ -4,7 +4,6 @@ on:
   push:
     branches: ["master", "main"]
   workflow_dispatch:
-  
 
 permissions:
   contents: read
@@ -41,7 +40,7 @@ jobs:
   deploy:
     name: Deploy to IIS
     runs-on: windows-latest
-    needs: build   # 🔒 DEPLOY ONLY AFTER BUILD SUCCESS
+    needs: build
 
     steps:
     - name: Download Build Artifact
@@ -52,11 +51,27 @@ jobs:
 
     - name: Deploy using MSDeploy
       shell: pwsh
+      env:
+        IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
+        IIS_SERVER: ${{ secrets.IIS_SERVER }}
+        IIS_USERNAME: ${{ secrets.IIS_USERNAME }}
+        IIS_PASSWORD: ${{ secrets.IIS_PASSWORD }}
       run: |
-        $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+        $msdeploy = 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe'
+        if (-not (Test-Path $msdeploy)) {
+          Write-Error "msdeploy.exe not found at $msdeploy"
+          exit 1
+        }
 
-        & $msdeploy -verb:sync `
-          -source:contentPath="publish" `
-          -dest:contentPath="${{ secrets.IIS_SITE_NAME }}",computerName="https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd",userName="${{ secrets.IIS_USERNAME }}",password="${{ secrets.IIS_PASSWORD }}",authType="Basic" `
-          -allowUntrusted `
-          -enableRule:AppOffline `
+        # Read secrets from environment (avoids ${{ }} in the inline script)
+        $site   = $env:IIS_SITE_NAME
+        $server = $env:IIS_SERVER
+        $user   = $env:IIS_USERNAME
+        $pass   = $env:IIS_PASSWORD
+
+        # Build provider strings using single quotes inside the provider values so PowerShell
+        # doesn't treat any $ or $(...) sequences as subexpressions
+        $source = "contentPath='publish'"
+        $dest   = "contentPath='$site',computerName='https://$server:8172/msdeploy.axd',userName='$user',password='$pass',authType='Basic'"
+
+        & "$msdeploy" -verb:sync "-source:$source" "-dest:$dest" -allowUntrusted -enableRule:AppOffline
