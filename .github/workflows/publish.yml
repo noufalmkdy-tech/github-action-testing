@@ -1,8 +1,8 @@
-name: Build and Deploy .net application
+name: Build and Deploy .NET Core application
 
 on:
   push:
-    branches: [ "main","test" ]
+    branches: [ "master" ]
   workflow_dispatch:
 
 env:
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
@@ -32,101 +32,24 @@ jobs:
       - name: Restore
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore
+
       - name: Publish (Release)
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -o ${{ runner.temp }}\\${{ env.PUBLISH_SUBFOLDER }}
 
       - name: Create artifact zip
+        id: zip
         shell: powershell
         run: |
           $publish = Join-Path $env:RUNNER_TEMP $env:PUBLISH_SUBFOLDER
           $zip = Join-Path $env:RUNNER_TEMP "${{ env.ARTIFACT_NAME }}.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip -Force
-          Write-Host "##[set-output name=artifact]$zip"
-        id: zip
+          "artifact=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Upload pipeline artifact (optional)
+      - name: Upload pipeline artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}\${{ env.ARTIFACT_NAME }}.zip
-
-  deploy:
-    name: Deploy to AWS EC2 (Windows) via SSM
-    needs: build
-    runs-on: windows-latest
-    environment: production
-    steps:
-      - name: Checkout (needed for workflow metadata)
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Upload artifact to S3
-        shell: powershell
-        env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET }}
-        run: |
-          $zip = Join-Path $env:RUNNER_TEMP "${{ env.ARTIFACT_NAME }}.zip"
-          if (-not (Test-Path $zip)) {
-            Write-Error "Artifact not found: $zip"
-            exit 1
-          }
-          $s3Key = "${{ env.ARTIFACT_NAME }}.zip"
-          Write-Host "Uploading $zip to s3://$env:S3_BUCKET/$s3Key"
-          aws s3 cp $zip "s3://$env:S3_BUCKET/$s3Key"
-
-      - name: Create presigned URL (1 hour)
-        id: presign
-        shell: powershell
-        env:
-          S3_BUCKET: ${{ secrets.S3_BUCKET }}
-        run: |
-          $s3Key = "${{ env.ARTIFACT_NAME }}.zip"
-          $url = aws s3 presign "s3://$env:S3_BUCKET/$s3Key" --expires-in 3600
-          if (-not $url) {
-            Write-Error "Failed to create presigned URL"
-            exit 1
-          }
-          Write-Host "Presigned URL created"
-          Write-Output "::set-output name=url::$url"
-
-      - name: Run deploy commands on EC2 via SSM
-        shell: powershell
-        env:
-          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
-          DEPLOY_PATH: C:\inetpub\sites            # e.g. C:\inetpub\wwwroot\MyApp
-          IIS_APPPOOL: ${{ secrets.IIS_APPPOOL }}            # optional app pool name (can be blank)
-          PRESIGNED_URL: ${{ steps.presign.outputs.url }}
-        run: |
-          if (-not $env:EC2_INSTANCE_ID) { Write-Error "EC2_INSTANCE_ID secret is required"; exit 1 }
-          if (-not $env:DEPLOY_PATH) { Write-Error "DEPLOY_PATH secret is required"; exit 1 }
-
-          $commands = @(
-            "$ErrorActionPreference = 'Stop'",
-            "New-Item -Path '${env:DEPLOY_PATH}' -ItemType Directory -Force | Out-Null",
-            "if (-not (Test-Path 'C:\\temp')) { New-Item -Path 'C:\\temp' -ItemType Directory -Force | Out-Null }",
-            "Remove-Item -Path 'C:\\temp\\${{ env.ARTIFACT_NAME }}.zip' -ErrorAction SilentlyContinue -Force",
-            "Invoke-WebRequest -Uri '${env:PRESIGNED_URL}' -OutFile 'C:\\temp\\${{ env.ARTIFACT_NAME }}.zip' -UseBasicParsing",
-            "Remove-Item -Path '${env:DEPLOY_PATH}\\*' -Recurse -Force -ErrorAction SilentlyContinue",
-            "Expand-Archive -Path 'C:\\temp\\${{ env.ARTIFACT_NAME }}.zip' -DestinationPath '${env:DEPLOY_PATH}' -Force",
-            "Import-Module WebAdministration -ErrorAction SilentlyContinue"
-          )
-
-          if ($env:IIS_APPPOOL) {
-            $commands += "if (Get-WebAppPoolState -Name '${env:IIS_APPPOOL}' -ErrorAction SilentlyContinue) { Restart-WebAppPool -Name '${env:IIS_APPPOOL}' } else { iisreset /restart }"
-          } else {
-            $commands += "iisreset /restart"
-          }
-
-          # Convert commands array into JSON parameter structure required by send-command
-          $params = @{ commands = $commands } | ConvertTo-Json -Compress
-
-          Write-Host "Sending SSM command to instance $env:EC2_INSTANCE_ID"
-          $result = aws ssm send-command --instance-ids "$env:EC2_INSTANCE_ID" --document-name "AWS-RunPowerShellScript" --parameters "$params" --comment "Deploy webapp from GitHub Actions" --region ${{ secrets.AWS_REGION }}
-          Write-Host $result
