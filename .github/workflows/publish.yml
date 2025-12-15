@@ -68,10 +68,6 @@ jobs:
           Write-Error "IIS_SERVER secret is missing"
           exit 1
         }
-        if ([string]::IsNullOrWhiteSpace($env:IIS_SITE_NAME)) {
-          Write-Error "IIS_SITE_NAME secret is missing"
-          exit 1
-        }
 
         $computerName = "https://$($env:IIS_SERVER):8172/msdeploy.axd"
 
@@ -79,8 +75,8 @@ jobs:
 
         & $msdeploy `
           -verb:sync `
-          -source:contentPath="publish" `
-          -dest:contentPath="$($env:IIS_SITE_NAME)",computerName="$computerName",userName="$($env:IIS_USERNAME)",password="$($env:IIS_PASSWORD)",authType="Basic" `
+          -source:contentPath=publish `
+          -dest:contentPath=$($env:IIS_SITE_NAME),computerName=$computerName,userName=$($env:IIS_USERNAME),password=$($env:IIS_PASSWORD),authType=Basic `
           -allowUntrusted `
           -enableRule:AppOffline
 
@@ -88,3 +84,4 @@ jobs:
           Write-Error "msdeploy failed with exit code $LASTEXITCODE"
           exit $LASTEXITCODE
         }
+
