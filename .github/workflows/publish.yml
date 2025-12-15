@@ -59,4 +59,4 @@ jobs:
           -source:contentPath="publish" `
           -dest:contentPath="${{ secrets.IIS_SITE_NAME }}",computerName="https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd",userName="${{ secrets.IIS_USERNAME }}",password="${{ secrets.IIS_PASSWORD }}",authType="Basic" `
           -allowUntrusted `
-          -enableRule:AppOffline
+          -enableRule:AppOffline `
