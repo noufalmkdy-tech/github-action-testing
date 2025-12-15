@@ -1,55 +1,39 @@
-name: Build and Deploy .NET Core application
+name: Build & Deploy .NET 9 to IIS (Windows)
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master", "main"]
   workflow_dispatch:
-
-env:
-  SOLUTION_PATH: ./MyApp.sln
-  PROJECT_PATH: MyApp/MyApp.csproj
-  ARTIFACT_NAME: webapp_package
-  PUBLISH_SUBFOLDER: publish
+  
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build:
-    name: Build and package
+    name: Build Job
     runs-on: windows-latest
-    environment: dev
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout Source
+      uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
 
-      - name: Restore
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+    - name: Restore Dependencies
+      run: dotnet restore
 
-      - name: Build
-        run: dotnet build ${{ env.SOLUTION_PATH }} -c Release --no-restore
+    - name: Build Application
+      run: dotnet build --configuration Release --no-restore
 
-      - name: Publish (Release)
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -o ${{ runner.temp }}\\${{ env.PUBLISH_SUBFOLDER }}
+    - name: Publish Application
+      run: dotnet publish --configuration Release --output publish
 
-      - name: Create artifact zip
-        id: zip
-        shell: powershell
-        run: |
-          $publish = Join-Path $env:RUNNER_TEMP $env:PUBLISH_SUBFOLDER
-          $zip = Join-Path $env:RUNNER_TEMP "${{ env.ARTIFACT_NAME }}.zip"
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip -Force
-          "artifact=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Upload pipeline artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: ${{ runner.temp }}\${{ env.ARTIFACT_NAME }}.zip
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dotnet9-publish
+        path: publish
