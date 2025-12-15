@@ -34,14 +34,15 @@ jobs:
             --configuration $env:BUILD_CONFIG `
             --output $env:PUBLISH_DIR
 
-      - name: Deploy to IIS on EC2 (Web Deploy)
+      - name: Deploy to IIS on EC2
         shell: pwsh
         run: |
           $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
 
-          & $msdeploy `
+          & "$msdeploy" `
             -verb:sync `
-            -source:contentPath="$env:PUBLISH_DIR" `
-            -dest:contentPath="${{ secrets.IIS_SITE_NAME }}",computerName="https://${{ secrets.IIS_SERVER }}:8172/msdeploy.axd",userName="${{ secrets.IIS_USERNAME }}",password="${{ secrets.IIS_PASSWORD }}",authType="Basic" `
+            -source:contentPath="publish_output" `
+            -dest:"contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.EC2_DEPLOY_USER }},password=${{ secrets.EC2_DEPLOY_PASSWORD }},authType=Basic" `
             -allowUntrusted `
             -enableRule:AppOffline
+
