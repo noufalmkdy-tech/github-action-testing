@@ -70,8 +70,20 @@ jobs:
         $pass = $env:IIS_PASSWORD
 
         if (-not $site -or -not $server -or -not $user -or -not $pass) {
-          Write-Error "One or more IIS secrets are missing"
+          Write-Error "One or more IIS secrets are missing (IIS_SERVER / IIS_SITE_NAME / IIS_USERNAME / IIS_PASSWORD)"
           exit 1
+        }
+
+        # Normalize server value into a proper wmsvc URL if needed
+        if ($server -match '^https?://') {
+          $base = $server.TrimEnd('/')
+          if ($base -notmatch '/msdeploy.axd$') {
+            $computerUrl = "$base/msdeploy.axd?site=$site"
+          } else {
+            $computerUrl = "$base?site=$site"
+          }
+        } else {
+          $computerUrl = "https://$server:8172/msdeploy.axd?site=$site"
         }
 
         # Create deployment package
@@ -80,25 +92,22 @@ jobs:
         Compress-Archive -Path "publish\*" -DestinationPath $zip -Force
 
         if (-not (Test-Path $zip)) {
-          Write-Error "Package creation failed"
+          Write-Error "Package creation failed: $zip"
           exit 1
         }
 
-        $computerName = "https://$server:8172/msdeploy.axd?site=$site"
+        # Build safe provider strings — wrap values in single-quotes to prevent PowerShell/msdeploy parsing issues
+        $source = "package='$zip'"
+        # Use 'auto' or 'iisApp' depending on target; using auto lets msdeploy pick correct provider.
+        # Using auto + computerName (wmsvc) forces the Web Management Service transport.
+        $dest = "auto,computerName='$computerUrl',userName='$user',password='$pass',authType='Basic'"
 
-        Write-Host "Deploying PACKAGE to IIS site '$site' on server '$server'"
+        Write-Host "Deploying PACKAGE to IIS site '$site' on server '$server' using URL: $computerUrl"
 
-        & $msdeploy `
-          -verb:sync `
-          -source:package=$zip `
-          -dest:iisApp=$site,computerName=$computerName,userName=$user,password=$pass,authType=Basic `
-          -allowUntrusted `
-          -enableRule:AppOffline
+        # Pass the entire -source and -dest as single arguments so msdeploy receives the resolved strings
+        & "$msdeploy" -verb:sync "-source:$source" "-dest:$dest" -allowUntrusted -enableRule:AppOffline
 
         if ($LASTEXITCODE -ne 0) {
           Write-Error "msdeploy failed with exit code $LASTEXITCODE"
           exit $LASTEXITCODE
         }
-
-
-
