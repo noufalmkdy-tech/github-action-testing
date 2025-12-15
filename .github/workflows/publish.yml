@@ -64,8 +64,8 @@ jobs:
           exit 1
         }
 
-        if ([string]::IsNullOrWhiteSpace($env:IIS_SERVER)) {
-          Write-Error "IIS_SERVER secret is missing"
+        if ([string]::IsNullOrWhiteSpace($env:IIS_SITE_NAME)) {
+          Write-Error "IIS_SITE_NAME secret is missing"
           exit 1
         }
 
@@ -76,7 +76,7 @@ jobs:
         & $msdeploy `
           -verb:sync `
           -source:contentPath=publish `
-          -dest:contentPath=$($env:IIS_SITE_NAME),computerName=$computerName,userName=$($env:IIS_USERNAME),password=$($env:IIS_PASSWORD),authType=Basic `
+          -dest:iisApp=$($env:IIS_SITE_NAME),computerName=$computerName,userName=$($env:IIS_USERNAME),password=$($env:IIS_PASSWORD),authType=Basic `
           -allowUntrusted `
           -enableRule:AppOffline
 
