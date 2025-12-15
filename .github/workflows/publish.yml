@@ -44,11 +44,9 @@ jobs:
         run: |
           $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
 
-          & "$msdeploy" `
-            -verb:sync `
-            -source:contentPath="$env:GITHUB_WORKSPACE\publish_output" `
-            -dest:"contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.IIS_USERNAME }},password=${{ secrets.IIS_PASSWORD }},authType=Basic" `
-            -allowUntrusted `
-            -enableRule:AppOffline
+          $dest = 'contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.IIS_USERNAME }},password=${{ secrets.IIS_PASSWORD }},authType=Basic'
+
+          & "$msdeploy" -verb:sync -source:contentPath="$env:GITHUB_WORKSPACE\publish_output" -dest:$dest -allowUntrusted -enableRule:AppOffline
+
 
 
