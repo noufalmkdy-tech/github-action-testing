@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  SOLUTION_PATH: src/MyApp.sln
+  SOLUTION_PATH: MyApp.sln
   PROJECT_PATH: MyApp/MyApp.csproj
   ARTIFACT_NAME: webapp_package
   PUBLISH_SUBFOLDER: publish
