@@ -41,7 +41,7 @@ jobs:
 
           & "$msdeploy" `
             -verb:sync `
-            -source:contentPath="publish_output" `
+            -source:contentPath="$env:GITHUB_WORKSPACE\publish_output" `
             -dest:"contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.EC2_DEPLOY_USER }},password=${{ secrets.EC2_DEPLOY_PASSWORD }},authType=Basic" `
             -allowUntrusted `
             -enableRule:AppOffline
