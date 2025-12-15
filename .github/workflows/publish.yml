@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  SOLUTION_PATH: MyApp.sln
+  SOLUTION_PATH: ../MyApp.sln
   PROJECT_PATH: MyApp/MyApp.csproj
   ARTIFACT_NAME: webapp_package
   PUBLISH_SUBFOLDER: publish
@@ -28,6 +28,10 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+
+      - name: List solution files (debug)
+        shell: powershell
+        run: Get-ChildItem -Path . -Filter *.sln -Recurse | Select-Object FullName
 
       - name: Restore
         run: dotnet restore ${{ env.PROJECT_PATH }}
