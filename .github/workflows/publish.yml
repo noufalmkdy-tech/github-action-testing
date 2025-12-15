@@ -14,100 +14,87 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout Source
-      uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '9.0.x'
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
 
-    - name: Restore Dependencies
-      run: dotnet restore
+      - name: Restore Dependencies
+        run: dotnet restore
 
-    - name: Build Application
-      run: dotnet build --configuration Release --no-restore
+      - name: Build Application
+        run: dotnet build --configuration Release --no-restore
 
-    - name: Publish Application
-      run: dotnet publish --configuration Release --output publish
+      - name: Publish Application
+        run: dotnet publish --configuration Release --output publish
 
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: dotnet9-publish
-        path: publish
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet9-publish
+          path: publish
 
   deploy:
     name: Deploy to IIS
     runs-on: windows-latest
-    needs: build   # ✅ deploy runs ONLY after build succeeds
+    needs: build
 
     steps:
-    - name: Download Build Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: dotnet9-publish
-        path: publish
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet9-publish
+          path: publish
 
-    - name: Deploy using MSDeploy (Package Mode)
-      shell: pwsh
-      env:
-        IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
-        IIS_SERVER: ${{ secrets.IIS_SERVER }}
-        IIS_USERNAME: ${{ secrets.IIS_USERNAME }}
-        IIS_PASSWORD: ${{ secrets.IIS_PASSWORD }}
-      run: |
-        $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-
-        if (-not (Test-Path $msdeploy)) {
-          Write-Error "msdeploy.exe not found"
-          exit 1
-        }
-
-        $site = $env:IIS_SITE_NAME
-        $server = $env:IIS_SERVER
-        $user = $env:IIS_USERNAME
-        $pass = $env:IIS_PASSWORD
-
-        if (-not $site -or -not $server -or -not $user -or -not $pass) {
-          Write-Error "One or more IIS secrets are missing (IIS_SERVER / IIS_SITE_NAME / IIS_USERNAME / IIS_PASSWORD)"
-          exit 1
-        }
-
-        # Normalize server value into a proper wmsvc URL if needed
-        if ($server -match '^https?://') {
-          $base = $server.TrimEnd('/')
-          if ($base -notmatch '/msdeploy.axd$') {
-            $computerUrl = "$base/msdeploy.axd?site=$site"
-          } else {
-            $computerUrl = "$base?site=$site"
+      - name: Deploy using MSDeploy (WMSVC)
+        shell: pwsh
+        env:
+          IIS_SITE_NAME: ${{ secrets.IIS_SITE_NAME }}
+          IIS_SERVER: ${{ secrets.IIS_SERVER }}
+          IIS_USERNAME: ${{ secrets.IIS_USERNAME }}
+          IIS_PASSWORD: ${{ secrets.IIS_PASSWORD }}
+        run: |
+          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          if (-not (Test-Path $msdeploy)) {
+            Write-Error "msdeploy.exe not found"
+            exit 1
           }
-        } else {
-          $computerUrl = "https://$server:8172/msdeploy.axd?site=$site"
-        }
 
-        # Create deployment package
-        $zip = Join-Path $env:RUNNER_TEMP "app.zip"
-        if (Test-Path $zip) { Remove-Item $zip -Force }
-        Compress-Archive -Path "publish\*" -DestinationPath $zip -Force
+          $site   = $env:IIS_SITE_NAME
+          $server = $env:IIS_SERVER
+          $user   = $env:IIS_USERNAME
+          $pass   = $env:IIS_PASSWORD
 
-        if (-not (Test-Path $zip)) {
-          Write-Error "Package creation failed: $zip"
-          exit 1
-        }
+          if ([string]::IsNullOrWhiteSpace($server)) { throw "IIS_SERVER secret is missing" }
+          if ([string]::IsNullOrWhiteSpace($site))   { throw "IIS_SITE_NAME secret is missing" }
+          if ([string]::IsNullOrWhiteSpace($user))   { throw "IIS_USERNAME secret is missing" }
+          if ([string]::IsNullOrWhiteSpace($pass))   { throw "IIS_PASSWORD secret is missing" }
 
-        # Build safe provider strings — wrap values in single-quotes to prevent PowerShell/msdeploy parsing issues
-        $source = "package='$zip'"
-        # Use 'auto' or 'iisApp' depending on target; using auto lets msdeploy pick correct provider.
-        # Using auto + computerName (wmsvc) forces the Web Management Service transport.
-        $dest = "auto,computerName='$computerUrl',userName='$user',password='$pass',authType='Basic'"
+          # Build correct WMSVC URL
+          $computerName = "https://$server:8172/msdeploy.axd?site=$site"
 
-        Write-Host "Deploying PACKAGE to IIS site '$site' on server '$server' using URL: $computerUrl"
+          # Zip publish folder
+          $zipPath = Join-Path $env:RUNNER_TEMP "site.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-        # Pass the entire -source and -dest as single arguments so msdeploy receives the resolved strings
-        & "$msdeploy" -verb:sync "-source:$source" "-dest:$dest" -allowUntrusted -enableRule:AppOffline
+          Compress-Archive -Path "publish\*" -DestinationPath $zipPath -Force
 
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "msdeploy failed with exit code $LASTEXITCODE"
-          exit $LASTEXITCODE
-        }
+          if (-not (Test-Path $zipPath)) {
+            throw "Deployment package not created"
+          }
+
+          Write-Host "Deploying to IIS site '$site' on '$server'"
+
+          & $msdeploy `
+            -verb:sync `
+            -source:package="$zipPath" `
+            -dest:auto,computerName="$computerName",userName="$user",password="$pass",authType="Basic" `
+            -allowUntrusted `
+            -enableRule:AppOffline
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "msdeploy failed with exit code $LASTEXITCODE"
+          }
