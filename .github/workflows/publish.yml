@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: windows-latest
+    environment: production
 
     env:
       BUILD_CONFIG: Release
@@ -34,6 +35,10 @@ jobs:
             --configuration $env:BUILD_CONFIG `
             --output $env:PUBLISH_DIR
 
+      - name: Debug secrets
+        run: |
+          if ("${{ secrets.EC2_HOST }}" -eq "") { Write-Error "EC2_HOST is EMPTY" }
+
       - name: Deploy to IIS on EC2
         shell: pwsh
         run: |
@@ -45,4 +50,5 @@ jobs:
             -dest:"contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.EC2_DEPLOY_USER }},password=${{ secrets.EC2_DEPLOY_PASSWORD }},authType=Basic" `
             -allowUntrusted `
             -enableRule:AppOffline
+
 
