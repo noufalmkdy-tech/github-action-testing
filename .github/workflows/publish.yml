@@ -89,11 +89,12 @@ jobs:
           Write-Host "Deploying to IIS site '$site' on '$server'"
 
           & $msdeploy `
-            -verb:sync `
-            -source:package="$zipPath" `
-            -dest:auto,computerName="$computerName",userName="$user",password="$pass",authType="Basic" `
-            -allowUntrusted `
-            -enableRule:AppOffline
+          -verb:sync `
+          -source:package=$zipPath `
+          -dest:auto,computerName=$computerName,userName=$user,password=$pass,authType=Basic `
+          -allowUntrusted `
+          -enableRule:AppOffline
+
 
           if ($LASTEXITCODE -ne 0) {
             throw "msdeploy failed with exit code $LASTEXITCODE"
