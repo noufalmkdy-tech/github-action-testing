@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest   # faster, consistent
 
     steps:
     - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
         dotnet-version: '9.0.x'
 
     - name: Publish
-      run: dotnet publish -c Release -o publish
+      run: dotnet publish -c Release -o ./publish
 
     - name: Configure AWS
       uses: aws-actions/configure-aws-credentials@v4
@@ -27,19 +27,12 @@ jobs:
         aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Upload artifacts to S3
-      run: |
-        aws s3 sync publish s3://my-dotnet-deploy-bucket/latest --delete
+      run: aws s3 sync ./publish s3://my-dotnet-deploy-bucket/latest --delete
 
     - name: Deploy via SSM
       run: |
-        aws ssm send-command `
-          --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" `
-          --document-name "AWS-RunPowerShellScript" `
-          --parameters '{
-            "commands": [
-              "iisreset /stop",
-              "aws s3 sync s3://my-dotnet-deploy-bucket/latest \"${{ secrets.DEPLOY_PATH }}\" --delete",
-              "iisreset /start"
-            ]
-          }'
-    
+        aws ssm send-command \
+          --targets "Key=instanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
+          --document-name "AWS-RunPowerShellScript" \
+          --comment "Deploy .NET app" \
+          --parameters '{"commands":["iisreset /stop","aws s3 sync s3://my-dotnet-deploy-bucket/latest ${{ secrets.DEPLOY_PATH }} --delete","iisreset /start"]}'
