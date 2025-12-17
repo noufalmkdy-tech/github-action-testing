@@ -35,4 +35,8 @@ jobs:
           --targets "Key=instanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
           --document-name "AWS-RunPowerShellScript" \
           --comment "Deploy .NET app" \
-          --parameters '{"commands":["iisreset /stop","aws s3 sync s3://my-dotnet-deploy-bucket/latest ${{ secrets.DEPLOY_PATH }} --delete","iisreset /start"]}'
+          --parameters "commands=[
+            \"iisreset /stop\",
+            \"aws s3 sync s3://my-dotnet-deploy-bucket/latest '${{ secrets.DEPLOY_PATH }}' --delete\",
+            \"iisreset /start\"
+          ]"
