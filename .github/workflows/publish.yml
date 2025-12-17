@@ -27,8 +27,8 @@ jobs:
     - name: Publish
       run: dotnet publish -c Release -o publish
 
-    - name: Deploy to EC2 (Windows Server)
-      uses: appleboy/winrm-action@v1
+    - name: Deploy to EC2 via WinRM
+      uses: crazy-max/winrm-action@v2
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
@@ -39,3 +39,4 @@ jobs:
           Remove-Item -Recurse -Force "${{ secrets.DEPLOY_PATH }}\*" -ErrorAction SilentlyContinue
           Copy-Item -Recurse -Force "publish\*" "${{ secrets.DEPLOY_PATH }}"
           iisreset /start
+
