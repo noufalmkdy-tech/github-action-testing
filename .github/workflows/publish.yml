@@ -37,6 +37,6 @@ jobs:
           --comment "Deploy .NET app" \
           --parameters "commands=[
             \"iisreset /stop\",
-            \"aws s3 sync s3://my-dotnet-deploy-bucket/latest \\\"C:\\inetpub\\sites\\MyDotNetApp\\\" --delete\",
+            \"aws s3 sync s3://my-dotnet-deploy-bucket/latest C:\\inetpub\\sites\\MyDotNetApp --delete\",
             \"iisreset /start\"
           ]"
