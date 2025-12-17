@@ -1,4 +1,4 @@
-﻿name: Deploy .NET Core App to AWS EC2 IIS
+name: Build and Deploy .NET 9 to EC2 (Windows)
 
 on:
   push:
@@ -8,45 +8,34 @@ on:
 jobs:
   build-and-deploy:
     runs-on: windows-latest
-    environment: production
-
-    env:
-      BUILD_CONFIG: Release
-      PUBLISH_DIR: publish_output
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+    - name: Checkout source
+      uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'   # change if needed
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore
+    - name: Restore dependencies
+      run: dotnet restore
 
-      - name: Build
-        run: dotnet build --configuration $env:BUILD_CONFIG --no-restore
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
 
-      - name: Publish
-        run: |
-          dotnet publish `
-            --configuration $env:BUILD_CONFIG `
-            --output $env:PUBLISH_DIR
+    - name: Publish
+      run: dotnet publish -c Release -o publish
 
-      - name: Debug secrets
-        run: |
-          if ("${{ secrets.EC2_HOST }}" -eq "") { Write-Error "EC2_HOST is EMPTY" }
-
-      - name: Deploy to IIS on EC2
-        shell: pwsh
-        run: |
-          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-
-          $dest = 'contentPath=${{ secrets.IIS_SITE_NAME }},computerName=https://${{ secrets.EC2_HOST }}:8172/msdeploy.axd,userName=${{ secrets.IIS_USERNAME }},password=${{ secrets.IIS_PASSWORD }},authType=Basic'
-
-          & "$msdeploy" -verb:sync -source:contentPath="$env:GITHUB_WORKSPACE\publish_output" -dest:$dest -allowUntrusted -enableRule:AppOffline
-
-
-
+    - name: Deploy to EC2 (Windows Server)
+      uses: appleboy/winrm-action@v1
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        password: ${{ secrets.EC2_PASSWORD }}
+        port: 5985
+        script: |
+          iisreset /stop
+          Remove-Item -Recurse -Force "${{ secrets.DEPLOY_PATH }}\*" -ErrorAction SilentlyContinue
+          Copy-Item -Recurse -Force "publish\*" "${{ secrets.DEPLOY_PATH }}"
+          iisreset /start
