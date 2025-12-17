@@ -32,12 +32,11 @@ jobs:
     - name: Deploy via SSM
       run: |
         aws ssm send-command \
-          --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+          --targets "Key=instanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
           --document-name "AWS-RunPowerShellScript" \
           --comment "Deploy .NET app" \
-          --parameters 'commands=[
-            "iisreset /stop",
-            "\"C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe\" s3 sync s3://my-dotnet-deploy-bucket/latest C:\\inetpub\\sites\\MyDotNetApp --delete --region '${{ secrets.AWS_REGION }}'",
-            "if ($LASTEXITCODE -ne 0) { throw ''S3 sync failed'' }",
-            "iisreset /start"
-          ]'
+          --parameters "commands=[
+            \"iisreset /stop\",
+            \"aws s3 sync s3://my-dotnet-deploy-bucket/latest C:\\inetpub\\sites\\MyDotNetApp --delete\",
+            \"iisreset /start\"
+          ]"
